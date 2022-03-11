@@ -6,7 +6,8 @@ ID : H00385163
 
 */
 
-#include <Ticker.h> //we import the Ticker librairie for using cycling executive method
+//#include <Ticker.h> //we import the Ticker librairie for using cycling executive method
+#include <Arduino_FreeRTOS.h>
 
 //we define our pin on the ESP32 board
 
@@ -47,80 +48,101 @@ void interrupt(){
 }
 
 //we send the signal B from the first assignement
-void task1(){
-    
-  digitalWrite(TASK1, HIGH);    
-  delayMicroseconds(50);
-  digitalWrite(TASK1, LOW); 
+void task1(void *pvParameters){
+  (void) pvParameters;
+  for(;;){  
+    digitalWrite(TASK1, HIGH);    
+    vTaskDelay( 0.05 / portTICK_PERIOD_MS );
+    digitalWrite(TASK1, LOW);
+  } 
 }
 
 //we read the input value of the button
-void task2(){
-  
-  input_Btn_t2 = digitalRead(INPUT_1);
+void task2(void *pvParameters){
+  (void) pvParameters;
+  for(;;){ 
+    input_Btn_t2 = digitalRead(INPUT_1);
+  }
 }
 
 //we calculate the frequency of the square signal using the values we get from the interrupt
-void task3(){
-  
-  frequency_measured_t3 = (1/((actualTime - passedTime)*0.000001)); 
+void task3(void *pvParameters){
+
+  (void) pvParameters;
+  for(;;){ 
+    frequency_measured_t3 = (1/((actualTime - passedTime)*0.000001)); 
+  }  
 }
 
 //we read the value of the potentiometer
-void task4(){
-  
-  input_potentiometer_t4 = analogRead(POTENTIOMETER_PIN);
+void task4(void *pvParameters){
+  (void) pvParameters;
+  for(;;){ 
+    input_potentiometer_t4 = analogRead(POTENTIOMETER_PIN);
+  }
 }
 
 //we calculate the average of the last 4 reads of the potentiometer
-void task5(){
-
-  //FIFO list to gather all last potentiometer values
-  all_potentiometer_t5[3] = all_potentiometer_t5[2];
-  all_potentiometer_t5[2] = all_potentiometer_t5[1];
-  all_potentiometer_t5[1] = all_potentiometer_t5[0];
-  all_potentiometer_t5[0] = input_potentiometer_t4;
-
-  average_potentiometer_t5 = 0;
-  unsigned short i=0;
-  for (i=0;i<=3;i++) average_potentiometer_t5 += all_potentiometer_t5[i];
-  average_potentiometer_t5 /= 4;
+void task5(void *pvParameters){
+  (void) pvParameters;
+  for(;;){ 
+    //FIFO list to gather all last potentiometer values
+    all_potentiometer_t5[3] = all_potentiometer_t5[2];
+    all_potentiometer_t5[2] = all_potentiometer_t5[1];
+    all_potentiometer_t5[1] = all_potentiometer_t5[0];
+    all_potentiometer_t5[0] = input_potentiometer_t4;
+  
+    average_potentiometer_t5 = 0;
+    unsigned short i=0;
+    for (i=0;i<=3;i++) average_potentiometer_t5 += all_potentiometer_t5[i];
+    average_potentiometer_t5 /= 4;
+  }
 }
 
 //execute 1000 times an empty instruction
-void task6(){
-  
-  unsigned short j=0;
-  for(j=0;j<=999;j++) __asm__ __volatile__ ("nop");
+void task6(void *pvParameters){
+  (void) pvParameters;
+  for(;;){ 
+    unsigned short j=0;
+    for(j=0;j<=999;j++) __asm__ __volatile__ ("nop");
+  }
 }
 
 //if the average of the potentiometer is higher than half of the maximum of the potentiometer, we put an error code to one, otherwise it is 0
-void task7(){
-  
-  if (average_potentiometer_t5 > max_potentiometer_t7/2 ) error_code_t7 = 1;
-  else error_code_t7 = 0;
+void task7(void *pvParameters){
+  (void) pvParameters;
+  for(;;){ 
+    if (average_potentiometer_t5 > max_potentiometer_t7/2 ) error_code_t7 = 1;
+    else error_code_t7 = 0;
+  }
 }
 
 //we light the LED knowing the error code
-void task8(){
-  
-  if (error_code_t7 == 1) digitalWrite(LED, HIGH);
-  else digitalWrite(LED, LOW);
+void task8(void *pvParameters){
+  (void) pvParameters;
+  for(;;){ 
+    if (error_code_t7 == 1) digitalWrite(LED, HIGH);
+    else digitalWrite(LED, LOW);
+  }
 }
 
 //we display in a csv file format the state of the input button, the frequency of the square wave and the average of the last 4 read of the potentiometer
-void task9(){
-  
-  Serial.print(input_Btn_t2);
-  Serial.print(",");
-  Serial.print(frequency_measured_t3);
-  Serial.print(",");
-  Serial.println(average_potentiometer_t5); 
+void task9(void *pvParameters){
+  (void) pvParameters;
+  for(;;){ 
+    Serial.print(input_Btn_t2);
+    Serial.print(",");
+    Serial.print(frequency_measured_t3);
+    Serial.print(",");
+    Serial.println(average_potentiometer_t5); 
+  }
 }
 
-void task10(){
-  if (input_Btn_t2 == 1) task9();
- 
+void task10(void *pvParameters){
+  (void) pvParameters;
+  for(;;){ 
+    if (input_Btn_t2 == 1) task9();
+  }
 }
 
 //we check the value of our counter and we execute each task at a certain frequency
@@ -156,7 +178,20 @@ void setup(){
   pinMode(INTERRUPT_PIN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), interrupt, RISING);
   
-  periodicTicker.attach_ms(1,do_all_task); //the ticker will called the do_all_task function every ms
+  //periodicTicker.attach_ms(1,do_all_task); //the ticker will called the do_all_task function every ms
+
+  xTaskCreate(task1,(const portCHAR *)"task1",128,NULL,1,NULL);
+  xTaskCreate(task2,(const portCHAR *)"task2",128,NULL,2,NULL);  
+  xTaskCreate(task3,(const portCHAR *)"task3",128,NULL,3,NULL);
+  xTaskCreate(task4,(const portCHAR *)"task4",128,NULL,4,NULL);
+  xTaskCreate(task5,(const portCHAR *)"task5",128,NULL,5,NULL);
+  xTaskCreate(task6,(const portCHAR *)"task6",128,NULL,6,NULL);
+  xTaskCreate(task7,(const portCHAR *)"task7",128,NULL,7,NULL);
+  xTaskCreate(task8,(const portCHAR *)"task8",128,NULL,8,NULL);
+  xTaskCreate(task9,(const portCHAR *)"task9",128,NULL,9,NULL);
+  xTaskCreate(task10,(const portCHAR *)"task10",128,NULL,10,NULL);
+  
+  
 }
 
 void loop(){
