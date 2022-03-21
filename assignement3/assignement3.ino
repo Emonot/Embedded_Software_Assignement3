@@ -8,7 +8,7 @@ ID : H00385163
 
 //we import the FreeRTOS Library and semaphore
 //#include <Arduino_FreeRTOS.h>
-//#include <semphr.h> 
+#include <semphr.h> 
 
 //we define our pin on the ESP32 board
 
@@ -20,17 +20,13 @@ ID : H00385163
 
 //we declare our variable and constant (t* correspond to the task where the variable has been used)
 
-
-bool input_Btn_t2 = 0; //state of the button we read
-
-float frequency_measured_t3;
 unsigned long actualTime = micros();//we use micros to check the current time in microseconds
 unsigned long passedTime = micros();
 
 unsigned short input_potentiometer_t4 = 0; //value of the potentiometer
 
 unsigned short all_potentiometer_t5[4] = {0,0,0,0}; //array that will received the last 4 values of our potentiometer
-unsigned short average_potentiometer_t5 = 0; //value that will contains the average of the last 4 read of the potentiometer
+
 
 const short max_potentiometer_t7 = 4095; //max value we can get from our potentiometer
 bool error_code_t7 = 0; //error_code depending on the value we read on the potentiometer
@@ -41,7 +37,13 @@ SemaphoreHandle_t xSerialSemaphore;
 
 int counter = 0;
 
+struct Task10 {
+   bool input_Btn_t2; //state of the button we read
+   float frequency_measured_t3; //frequency of the square signal
+   unsigned short average_potentiometer_t5; //value that will contains the average of the last 4 read of the potentiometer
+}; 
 
+struct Task10 task10
 //we declare our functions, each task is a function + 2 other functions (one for the square interrupt and the other for executing a task at a certain frequence)
 
 //we check the period of the square wave, the interrupt is called for the rising edge of the square wave.
@@ -68,7 +70,7 @@ void task2(void *pvParameters){
   (void) pvParameters;
   for(;;){ 
     
-    input_Btn_t2 = digitalRead(INPUT_1);
+    task10.input_Btn_t2 = digitalRead(INPUT_1);
     vTaskDelay( 200 / portTICK_PERIOD_MS );
   }
 }
@@ -78,7 +80,7 @@ void task3(void *pvParameters){
 
   (void) pvParameters;
   for(;;){ 
-    frequency_measured_t3 = (1/((actualTime - passedTime)*0.000001));
+    task10.frequency_measured_t3 = (1/((actualTime - passedTime)*0.000001));
     vTaskDelay( 1000 / portTICK_PERIOD_MS ); 
     
   }  
@@ -103,10 +105,10 @@ void task5(void *pvParameters){
     all_potentiometer_t5[1] = all_potentiometer_t5[0];
     all_potentiometer_t5[0] = input_potentiometer_t4;
   
-    average_potentiometer_t5 = 0;
+    task10.average_potentiometer_t5 = 0;
     unsigned short i=0;
-    for (i=0;i<=3;i++) average_potentiometer_t5 += all_potentiometer_t5[i];
-    average_potentiometer_t5 /= 4;
+    for (i=0;i<=3;i++) task10.average_potentiometer_t5 += all_potentiometer_t5[i];
+    task10.average_potentiometer_t5 /= 4;
     vTaskDelay( 41 / portTICK_PERIOD_MS );
   }
 }
@@ -125,7 +127,7 @@ void task6(void *pvParameters){
 void task7(void *pvParameters){
   (void) pvParameters;
   for(;;){ 
-    if (average_potentiometer_t5 > max_potentiometer_t7/2 ) error_code_t7 = 1;
+    if (task10.average_potentiometer_t5 > max_potentiometer_t7/2 ) error_code_t7 = 1;
     else error_code_t7 = 0;
     vTaskDelay( 333 / portTICK_PERIOD_MS );
   }
@@ -153,11 +155,11 @@ void task9(void *pvParameters){
       // We want to have the Serial Port for us alone, as it takes some time to print,
       // so we don't want it getting stolen during the middle of a conversion.
       // print out the state of the button:
-      Serial.print(input_Btn_t2);
+      Serial.print(task10.input_Btn_t2);
       Serial.print(",");
-      Serial.print(frequency_measured_t3);
+      Serial.print(task10.frequency_measured_t3);
       Serial.print(",");
-      Serial.println(average_potentiometer_t5);
+      Serial.println(task10.average_potentiometer_t5);
 
       xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
     }
@@ -167,7 +169,7 @@ void task9(void *pvParameters){
 void task10(void *pvParameters){
   (void) pvParameters;
   for(;;){ 
-    if (input_Btn_t2 == 1) task9();
+    if (task10.input_Btn_t2 == 1) task9();
     vTaskDelay( 5000 / portTICK_PERIOD_MS ); 
   }
 }
@@ -229,12 +231,7 @@ void setup(){
   
 }
 
-struct Books {
-   char  title[50];
-   char  author[50];
-   char  subject[100];
-   int   book_id;
-} book; 
+
 
 void loop(){
   // the loop function stays empty as an interrupt will called do_all_task every millisecond
