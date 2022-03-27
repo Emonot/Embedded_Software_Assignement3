@@ -8,7 +8,7 @@ ID : H00385163
 
 //we import the FreeRTOS Library and semaphore
 //#include <Arduino_FreeRTOS.h>
-#include <semphr.h> 
+//#include <semphr.h> 
 
 //we define our pin on the ESP32 board
 
@@ -17,6 +17,8 @@ ID : H00385163
 #define TASK1 25 //pin to send the SIGNAL B's first assignement
 #define INTERRUPT_PIN 34 //pin to read the frequency of a square wave
 #define POTENTIOMETER_PIN 32 //pin to read the potentiometer
+
+const short timet1 = 200;
 
 //we declare our variable and constant (t* correspond to the task where the variable has been used)
 
@@ -27,15 +29,13 @@ unsigned short input_potentiometer_t4 = 0; //value of the potentiometer
 
 unsigned short all_potentiometer_t5[4] = {0,0,0,0}; //array that will received the last 4 values of our potentiometer
 
-
 const short max_potentiometer_t7 = 4095; //max value we can get from our potentiometer
 bool error_code_t7 = 0; //error_code depending on the value we read on the potentiometer
 
 // Declare a mutex Semaphore Handle which we will use to manage the Serial Port.
 // It will be used to ensure only only one Task is accessing this resource at any time.
 SemaphoreHandle_t xSerialSemaphore;
-
-int counter = 0;
+QueueHandle_t potentiometer_queue;
 
 struct Task10 {
    bool input_Btn_t2; //state of the button we read
@@ -43,7 +43,7 @@ struct Task10 {
    unsigned short average_potentiometer_t5; //value that will contains the average of the last 4 read of the potentiometer
 }; 
 
-struct Task10 task10
+struct Task10 struct_task10;
 //we declare our functions, each task is a function + 2 other functions (one for the square interrupt and the other for executing a task at a certain frequence)
 
 //we check the period of the square wave, the interrupt is called for the rising edge of the square wave.
@@ -69,9 +69,19 @@ void task1(void *pvParameters){
 void task2(void *pvParameters){
   (void) pvParameters;
   for(;;){ 
+    if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 5 ) == pdTRUE )
+    {
+      // We were able to obtain or "Take" the semaphore and can now access the shared resource.
+      // We want to have the Serial Port for us alone, as it takes some time to print,
+      // so we don't want it getting stolen during the middle of a conversion.
+      // print out the state of the button:
+     struct_task10.input_Btn_t2 = digitalRead(INPUT_1);
+
+    xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
+    }
+    vTaskDelay( 200 );
+
     
-    task10.input_Btn_t2 = digitalRead(INPUT_1);
-    vTaskDelay( 200 / portTICK_PERIOD_MS );
   }
 }
 
@@ -80,9 +90,17 @@ void task3(void *pvParameters){
 
   (void) pvParameters;
   for(;;){ 
-    task10.frequency_measured_t3 = (1/((actualTime - passedTime)*0.000001));
-    vTaskDelay( 1000 / portTICK_PERIOD_MS ); 
-    
+    if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 5 ) == pdTRUE )
+    {
+      // We were able to obtain or "Take" the semaphore and can now access the shared resource.
+      // We want to have the Serial Port for us alone, as it takes some time to print,
+      // so we don't want it getting stolen during the middle of a conversion.
+      // print out the state of the button:
+      struct_task10.frequency_measured_t3 = (1/((actualTime - passedTime)*0.000001));
+      
+      xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
+    }
+    vTaskDelay( 1000 / portTICK_PERIOD_MS );
   }  
 }
 
@@ -91,7 +109,8 @@ void task4(void *pvParameters){
   (void) pvParameters;
   for(;;){ 
     input_potentiometer_t4 = analogRead(POTENTIOMETER_PIN);
-    vTaskDelay( 41 / portTICK_PERIOD_MS );
+    xQueueSend(potentiometer_queue, &input_potentiometer_t4, portMAX_DELAY);
+    vTaskDelay( 41 / portTICK_PERIOD_MS ); 
   }
 }
 
@@ -99,16 +118,26 @@ void task4(void *pvParameters){
 void task5(void *pvParameters){
   (void) pvParameters;
   for(;;){ 
-    //FIFO list to gather all last potentiometer values
-    all_potentiometer_t5[3] = all_potentiometer_t5[2];
-    all_potentiometer_t5[2] = all_potentiometer_t5[1];
-    all_potentiometer_t5[1] = all_potentiometer_t5[0];
-    all_potentiometer_t5[0] = input_potentiometer_t4;
+    if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 5 ) == pdTRUE )
+    {
+      // We were able to obtain or "Take" the semaphore and can now access the shared resource.
+      // We want to have the Serial Port for us alone, as it takes some time to print,
+      // so we don't want it getting stolen during the middle of a conversion.
+      // print out the state of the button:
+      //FIFO list to gather all last potentiometer values
+      all_potentiometer_t5[3] = all_potentiometer_t5[2];
+      all_potentiometer_t5[2] = all_potentiometer_t5[1];
+      all_potentiometer_t5[1] = all_potentiometer_t5[0];
+      xQueueReceive(potentiometer_queue, all_potentiometer_t5, portMAX_DELAY);
+    
+      struct_task10.average_potentiometer_t5 = 0;
+      unsigned short i=0;
+      for (i=0;i<=3;i++) struct_task10.average_potentiometer_t5 += all_potentiometer_t5[i];
+      struct_task10.average_potentiometer_t5 /= 4;
+      
   
-    task10.average_potentiometer_t5 = 0;
-    unsigned short i=0;
-    for (i=0;i<=3;i++) task10.average_potentiometer_t5 += all_potentiometer_t5[i];
-    task10.average_potentiometer_t5 /= 4;
+      xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
+    }
     vTaskDelay( 41 / portTICK_PERIOD_MS );
   }
 }
@@ -126,11 +155,22 @@ void task6(void *pvParameters){
 //if the average of the potentiometer is higher than half of the maximum of the potentiometer, we put an error code to one, otherwise it is 0
 void task7(void *pvParameters){
   (void) pvParameters;
-  for(;;){ 
-    if (task10.average_potentiometer_t5 > max_potentiometer_t7/2 ) error_code_t7 = 1;
+  for(;;){
+    if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 5 ) == pdTRUE )
+    {
+    // We were able to obtain or "Take" the semaphore and can now access the shared resource.
+    // We want to have the Serial Port for us alone, as it takes some time to print,
+    // so we don't want it getting stolen during the middle of a conversion.
+    // print out the state of the button:
+    if (struct_task10.average_potentiometer_t5 > max_potentiometer_t7/2 ) error_code_t7 = 1;
     else error_code_t7 = 0;
+    
+
+    xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
+    } 
     vTaskDelay( 333 / portTICK_PERIOD_MS );
   }
+  
 }
 
 //we light the LED knowing the error code
@@ -144,39 +184,36 @@ void task8(void *pvParameters){
 }
 
 //we display in a csv file format the state of the input button, the frequency of the square wave and the average of the last 4 read of the potentiometer
-/*
-void task9(void *pvParameters){
-  (void) pvParameters;
-  for(;;){ 
-    
-    if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 5 ) == pdTRUE )
-    {
-      // We were able to obtain or "Take" the semaphore and can now access the shared resource.
-      // We want to have the Serial Port for us alone, as it takes some time to print,
-      // so we don't want it getting stolen during the middle of a conversion.
-      // print out the state of the button:
-      Serial.print(task10.input_Btn_t2);
-      Serial.print(",");
-      Serial.print(task10.frequency_measured_t3);
-      Serial.print(",");
-      Serial.println(task10.average_potentiometer_t5);
 
-      xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
-    }
+void task9(){
+   
+  if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 5 ) == pdTRUE )
+  {
+    // We were able to obtain or "Take" the semaphore and can now access the shared resource.
+    // We want to have the Serial Port for us alone, as it takes some time to print,
+    // so we don't want it getting stolen during the middle of a conversion.
+    // print out the state of the button:
+    Serial.print(struct_task10.input_Btn_t2);
+    Serial.print(",");
+    Serial.print(struct_task10.frequency_measured_t3);
+    Serial.print(",");
+    Serial.println(struct_task10.average_potentiometer_t5);
+
+    xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
   }
+
 }
 
 void task10(void *pvParameters){
   (void) pvParameters;
   for(;;){ 
-    if (task10.input_Btn_t2 == 1) task9();
+    if (struct_task10.input_Btn_t2 == 1) task9();
     vTaskDelay( 5000 / portTICK_PERIOD_MS ); 
   }
 }
-*/
+
 //we check the value of our counter and we execute each task at a certain frequency
 //we use the modulo operation to execute the task at each new period (for exemple, if the number is 1000, we execute the task every second)
-void do_all_task(){ 
 
   /*
   if (counter % 42 == 0) task1(); //period of signal B in first assignement is 42.15ms
@@ -189,13 +226,15 @@ void do_all_task(){
   if (counter % 333 == 0)task8();    
   if (counter % 5000 == 0) task9();
 */
-}
+
 
 
 //in the setup function, we initialise our pin, and add our ticker
 void setup(){
 
   Serial.begin(115200);
+  Serial.print("");
+  potentiometer_queue = xQueueCreate(1,sizeof(short));
   
   if ( xSerialSemaphore == NULL )  // Check to confirm that the Serial Semaphore has not already been created.
   {
@@ -225,9 +264,7 @@ void setup(){
   xTaskCreate(task6,"task6",4096,NULL,6,NULL);
   xTaskCreate(task7,"task7",4096,NULL,7,NULL);
   xTaskCreate(task8,"task8",4096,NULL,8,NULL);
-  //xTaskCreate(task9,(const portCHAR *)"task9",128,NULL,9,NULL);
-  //xTaskCreate(task10,(const portCHAR *)"task10",128,NULL,10,NULL);
-  
+  xTaskCreate(task10,"task10",4096,NULL,10,NULL);
   
 }
 
