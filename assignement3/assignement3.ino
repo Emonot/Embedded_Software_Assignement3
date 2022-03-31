@@ -256,15 +256,15 @@ void setup(){
   
   //periodicTicker.attach_ms(1,do_all_task); //the ticker will called the do_all_task function every ms
 
-  xTaskCreate(task1,"task1",4096,NULL,1,NULL);
-  xTaskCreate(task2,"task2",4096,NULL,2,NULL);  
-  xTaskCreate(task3,"task3",4096,NULL,3,NULL);
-  xTaskCreate(task4,"task4",4096,NULL,4,NULL);
-  xTaskCreate(task5,"task5",4096,NULL,5,NULL);
-  xTaskCreate(task6,"task6",4096,NULL,6,NULL);
-  xTaskCreate(task7,"task7",4096,NULL,7,NULL);
+  xTaskCreate(task1,"task1",4096,NULL,3,NULL);
+  xTaskCreate(task2,"task2",4096,NULL,4,NULL);  
+  xTaskCreate(task3,"task3",4096,NULL,7,NULL);
+  xTaskCreate(task4,"task4",4096,NULL,1,NULL);
+  xTaskCreate(task5,"task5",4096,NULL,2,NULL);
+  xTaskCreate(task6,"task6",4096,NULL,5,NULL);
+  xTaskCreate(task7,"task7",4096,NULL,6,NULL);
   xTaskCreate(task8,"task8",4096,NULL,8,NULL);
-  xTaskCreate(task10,"task10",4096,NULL,10,NULL);
+  xTaskCreate(task10,"task10",4096,NULL,9,NULL);
   
 }
 
